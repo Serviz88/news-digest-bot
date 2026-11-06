@@ -1,0 +1,16 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+          for u in \
+            "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&limit=3" \
+            "https://api.bytick.com/v5/announcements/index?locale=en-US&type=new_crypto&limit=3" \
+            "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=3&catalogId=48" \
+            "https://www.okx.com/api/v5/support/announcements?annType=announcements-new-listings" ; do
+            echo "=== $u"
+            curl -s -m 20 -A "$UA" -w "\nHTTP %{http_code}\n" "$u" | head -c 700; echo
+          done
