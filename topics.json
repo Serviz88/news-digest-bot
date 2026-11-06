@@ -1,5 +1,35 @@
 {
   "topics": [
-    "Экономика и финансы"
+    {
+      "name": "💰 Экономика и финансы",
+      "focus": "Экономика России и мира: ЦБ и ставки, курс рубля, нефть, биржи, крупные компании, налоги и законы для бизнеса.",
+      "count": 4,
+      "feeds": [
+        {"name": "РБК", "urls": ["https://rssexport.rbc.ru/rbcnews/news/30/full.rss"]},
+        {"name": "Коммерсантъ", "urls": ["https://www.kommersant.ru/RSS/section-economics.xml", "https://www.kommersant.ru/RSS/main.xml"]},
+        {"name": "Интерфакс", "urls": ["https://www.interfax.ru/rss.asp"]}
+      ]
+    },
+    {
+      "name": "₿ Криптовалюты",
+      "focus": "Биткоин, эфир, крупные альткоины, биржи, ETF, регулирование крипты в России и мире, взломы и крупные события рынка.",
+      "count": 5,
+      "feeds": [
+        {"name": "ForkLog", "urls": ["https://forklog.com/feed", "https://forklog.com/feed/"]},
+        {"name": "Bits.media", "urls": ["https://bits.media/rss2/", "https://bits.media/rss/"]},
+        {"name": "CoinDesk", "urls": ["https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml"]},
+        {"name": "Cointelegraph", "urls": ["https://cointelegraph.com/rss"]}
+      ]
+    },
+    {
+      "name": "🌍 Главные события",
+      "focus": "Самые значимые события дня в России и мире: политика, международные отношения, крупные происшествия. Без экономики и крипты — они в других разделах.",
+      "count": 4,
+      "feeds": [
+        {"name": "ТАСС", "urls": ["https://tass.ru/rss/v2.xml", "http://itar-tass.com/rss/v2.xml"]},
+        {"name": "Интерфакс", "urls": ["https://www.interfax.ru/rss.asp"]},
+        {"name": "РБК", "urls": ["https://rssexport.rbc.ru/rbcnews/news/30/full.rss"]}
+      ]
+    }
   ]
 }

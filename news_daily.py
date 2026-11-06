@@ -2,46 +2,176 @@
 """
 Ежедневный дайджест новостей в Telegram.
 
+Как работает:
+  1. Для каждой темы из topics.json бот забирает свежие новости из бесплатных
+     RSS-лент (только за последние сутки).
+  2. Дешёвая модель Claude Haiku выбирает самые важные, убирает повторы,
+     переводит на русский и пишет суть в одну строку.
+  3. Готовый дайджест уходит в Telegram.
+
 Запускается по расписанию (см. .github/workflows/daily-digest.yml).
-Темы для отслеживания читаются из topics.json в этой же папке.
 
 Нужные переменные окружения (задаются как GitHub Secrets):
   ANTHROPIC_API_KEY   - ключ Anthropic API
   TELEGRAM_BOT_TOKEN  - токен бота от BotFather
-  TELEGRAM_CHAT_ID    - id чата/пользователя, куда слать сообщения
+  TELEGRAM_CHAT_ID    - твой личный чат: сюда приходят служебные сообщения о сбоях
+                        (а если канал не задан — и сам дайджест)
+  TELEGRAM_CHANNEL_ID - (необязательно) канал для дайджеста, например @my_channel;
+                        бот должен быть администратором канала
 """
 
+import html
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")        # твой личный чат (служебные сообщения)
+TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "")  # канал, например @my_channel
+CHANNEL_FOOTER = os.environ.get("CHANNEL_FOOTER", "")            # подпись внизу поста в канале (необязательно)
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 TELEGRAM_URL = "https://api.telegram.org/bot{token}/sendMessage"
+MODEL = "claude-haiku-4-5"
 
-MAX_ITEMS_PER_TOPIC = 4
 MOSCOW_TZ = timezone(timedelta(hours=3))
+FRESH_HOURS = 26            # берём новости не старше этого (сутки + запас)
+MAX_ITEMS_TO_MODEL = 120    # сколько заголовков максимум отдаём модели по одной теме
+DESC_CHARS = 200            # сколько символов описания статьи отдаём модели
+USER_AGENT = "Mozilla/5.0 (compatible; news-digest-bot/2.0)"
 
 
-def load_topics():
+# ---------------------------------------------------------------- настройки
+
+def load_config():
     here = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(here, "topics.json")
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            topics = data.get("topics", [])
-            if topics:
-                return topics
-    except FileNotFoundError:
-        pass
-    return ["Экономика и финансы"]
+    with open(os.path.join(here, "topics.json"), "r", encoding="utf-8") as f:
+        data = json.load(f)
+    topics = data.get("topics", [])
+    if not topics:
+        raise SystemExit("В topics.json нет тем")
+    return topics
 
+
+# ---------------------------------------------------------------- RSS
+
+_FEED_CACHE = {}
+
+
+def http_get(url, timeout=25):
+    # одна и та же лента может быть в нескольких темах — качаем её один раз
+    if url not in _FEED_CACHE:
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            _FEED_CACHE[url] = resp.read()
+    return _FEED_CACHE[url]
+
+
+def clean_text(text):
+    text = html.unescape(text or "")
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def local_name(tag):
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def child_text(elem, *names):
+    for child in elem:
+        if local_name(child.tag) in names and (child.text or "").strip():
+            return child.text.strip()
+    return ""
+
+
+def parse_date(value):
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        dt = None
+    if dt is None:
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def parse_feed(raw, source_name):
+    """Разбирает RSS 2.0 и Atom. Возвращает список новостей."""
+    root = ET.fromstring(raw)
+    items = []
+    for elem in root.iter():
+        name = local_name(elem.tag)
+        if name not in ("item", "entry"):
+            continue
+        title = clean_text(child_text(elem, "title"))
+        if not title:
+            continue
+        link = child_text(elem, "link")
+        if not link:  # Atom: <link href="..."/>
+            for child in elem:
+                if local_name(child.tag) == "link" and child.get("href"):
+                    if child.get("rel", "alternate") == "alternate":
+                        link = child.get("href")
+                        break
+        desc = clean_text(child_text(elem, "description", "summary", "content"))
+        date = parse_date(child_text(elem, "pubdate", "published", "updated", "date"))
+        items.append({
+            "title": title,
+            "link": link.strip(),
+            "desc": desc[:DESC_CHARS],
+            "date": date,
+            "source": source_name,
+        })
+    return items
+
+
+def collect_topic_items(topic, problems):
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=FRESH_HOURS)
+    all_items = []
+    seen_titles = set()
+    for feed in topic.get("feeds", []):
+        name = feed.get("name", "?")
+        urls = feed.get("urls") or [feed.get("url")]
+        got = None
+        for url in [u for u in urls if u]:
+            try:
+                got = parse_feed(http_get(url), name)
+                break
+            except Exception as e:  # пробуем запасной адрес
+                print(f"[{name}] {url}: {e}", file=sys.stderr)
+        if got is None:
+            problems.add(name)
+            continue
+        for it in got:
+            if it["date"] is not None and it["date"] < cutoff:
+                continue
+            key = it["title"].lower()
+            if key in seen_titles:
+                continue
+            seen_titles.add(key)
+            all_items.append(it)
+
+    old = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    all_items.sort(key=lambda x: x["date"] or old, reverse=True)
+    return all_items[:MAX_ITEMS_TO_MODEL]
+
+
+# ---------------------------------------------------------------- Claude Haiku
 
 def http_post_json(url, payload, headers, timeout=90):
     body = json.dumps(payload).encode("utf-8")
@@ -53,180 +183,213 @@ def http_post_json(url, payload, headers, timeout=90):
 def extract_json_array(raw_text):
     cleaned = raw_text.replace("```json", "").replace("```", "").strip()
     start = cleaned.find("[")
-    if start == -1:
-        raise ValueError("в ответе нет массива")
-    sliced = cleaned[start:]
-
-    try:
-        return json.loads(sliced)
-    except json.JSONDecodeError:
-        pass
-
-    last_brace = sliced.rfind("}")
-    while last_brace > 0:
-        candidate = sliced[: last_brace + 1] + "]"
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            last_brace = sliced.rfind("}", 0, last_brace)
-
-    raise ValueError("не удалось разобрать ответ модели")
+    end = cleaned.rfind("]")
+    if start == -1 or end == -1:
+        raise ValueError("в ответе модели нет списка")
+    return json.loads(cleaned[start:end + 1])
 
 
-def fetch_news_for_topic(topic):
+def pick_top_news(topic, items, already_chosen):
+    count = int(topic.get("count", 5))
+    lines = []
+    for i, it in enumerate(items):
+        line = f"{i}. [{it['source']}] {it['title']}"
+        if it["desc"]:
+            line += f" — {it['desc']}"
+        lines.append(line)
+
+    avoid = ""
+    if already_chosen:
+        avoid = (
+            "\nЭти новости уже есть в других разделах дайджеста, НЕ выбирай их "
+            "и новости про то же самое:\n- " + "\n- ".join(already_chosen) + "\n"
+        )
+
     system_prompt = (
-        "Ты — ассистент новостного мониторинга. Найди через веб-поиск "
-        f"{MAX_ITEMS_PER_TOPIC} самые свежие новости (за последние 24-48 часов) "
-        "по теме от пользователя.\n"
-        "Ответь ТОЛЬКО компактным JSON-массивом в одну строку, без переносов "
-        "строк, без markdown-обрамления и без единого слова текста до или после массива.\n"
-        'Формат элемента: {"title":"..","source":"..","summary":"..","url":"..","time":".."}\n'
+        "Ты — редактор утреннего новостного дайджеста. Тебе дают пронумерованный "
+        "список свежих новостей из нескольких источников.\n"
+        f"Раздел дайджеста: «{topic['name']}». {topic.get('focus', '')}\n"
+        f"Выбери до {count} самых важных новостей для этого раздела.\n"
         "Правила:\n"
-        "- title и summary — на русском, даже если источник на другом языке.\n"
-        "- summary — не длиннее 15 слов, самая суть.\n"
-        "- source — короткое название издания.\n"
-        "- url — прямая ссылка на статью.\n"
-        '- time — относительное время/дата, иначе "".\n'
-        "- Если ничего свежего нет — верни [].\n"
-        "Экономь токены: без рассуждений, сразу ищи и сразу отвечай JSON."
+        "- Если одну и ту же новость пишут несколько источников — бери её один раз.\n"
+        "- Пропускай рекламу, пресс-релизы, мелкие и развлекательные новости.\n"
+        "- title — короткий заголовок на русском (перевод, если источник на английском).\n"
+        "- summary — суть на русском, не длиннее 15 слов.\n"
+        "Ответь ТОЛЬКО JSON-массивом без текста до или после, формат элемента:\n"
+        '{"id": <номер новости из списка>, "title": "...", "summary": "..."}\n'
+        "Если подходящих новостей нет — верни []."
     )
 
     payload = {
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 1000,
+        "model": MODEL,
+        "max_tokens": 1500,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": f"Тема: {topic}"}],
-        "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+        "messages": [{"role": "user", "content": avoid + "\nНовости:\n" + "\n".join(lines)}],
     }
     headers = {
         "Content-Type": "application/json",
         "x-api-key": ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
     }
-
     data = http_post_json(ANTHROPIC_URL, payload, headers)
-    text_parts = [
-        block.get("text", "")
-        for block in data.get("content", [])
-        if block.get("type") == "text"
-    ]
-    text = "\n".join(p for p in text_parts if p).strip()
-    if not text:
-        raise ValueError("пустой ответ от модели")
+    text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+    chosen = extract_json_array(text)
 
-    items = extract_json_array(text)
-    if not isinstance(items, list):
-        raise ValueError("неожиданный формат ответа")
-    return items
+    result = []
+    used_ids = set()
+    for c in chosen:
+        try:
+            idx = int(c.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if idx in used_ids or not (0 <= idx < len(items)):
+            continue
+        used_ids.add(idx)
+        src = items[idx]
+        result.append({
+            "title": c.get("title") or src["title"],
+            "summary": c.get("summary") or "",
+            "url": src["link"],  # ссылку берём из самой ленты, а не из ответа модели
+            "source": src["source"],
+            "date": src["date"],
+        })
+        if len(result) >= count:
+            break
+    return result
 
+
+# ---------------------------------------------------------------- Telegram
 
 def escape_html(text):
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def build_digest(topic_results):
-    now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y %H:%M")
-    lines = [f"<b>📰 Дайджест новостей — {now_str} МСК</b>", ""]
+def time_label(dt):
+    if not dt:
+        return ""
+    return dt.astimezone(MOSCOW_TZ).strftime("%d.%m %H:%M")
 
-    any_items = False
-    for topic, result in topic_results:
-        lines.append(f"<b>{escape_html(topic)}</b>")
-        if result["error"]:
-            lines.append(f"⚠️ не удалось получить новости: {escape_html(result['error'])}")
-        elif not result["items"]:
-            lines.append("Свежих новостей не найдено.")
-        else:
-            any_items = True
-            for item in result["items"]:
-                title = escape_html(item.get("title") or "Без названия")
-                url = item.get("url") or ""
-                summary = escape_html(item.get("summary") or "")
-                source = escape_html(item.get("source") or "")
-                time_ = escape_html(item.get("time") or "")
-                meta = " · ".join(x for x in [source, time_] if x)
-                title_line = f'<a href="{escape_html(url)}">{title}</a>' if url else title
-                lines.append(f"• {title_line}")
-                if summary:
-                    lines.append(f"  {summary}")
-                if meta:
-                    lines.append(f"  <i>{meta}</i>")
+
+def build_digest(sections, footer=""):
+    """Пост для канала/чата: только готовые разделы, без технических сообщений."""
+    now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+    lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
+    for name, result in sections:
+        if result["error"] or not result["items"]:
+            continue
+        lines.append(f"<b>{escape_html(name)}</b>")
+        for item in result["items"]:
+            title = escape_html(item["title"])
+            if item["url"]:
+                title = f'<a href="{escape_html(item["url"])}">{title}</a>'
+            lines.append(f"• {title}")
+            if item["summary"]:
+                lines.append(f"  {escape_html(item['summary'])}")
+            meta = " · ".join(x for x in [escape_html(item["source"]), time_label(item["date"])] if x)
+            if meta:
+                lines.append(f"  <i>{meta}</i>")
         lines.append("")
-
-    if not any_items:
-        lines.append("Похоже, сегодня без значимых свежих новостей по отслеживаемым темам.")
-
+    if footer:
+        lines.append(escape_html(footer))
     return "\n".join(lines).strip()
 
 
+def build_service_report(sections, problems):
+    """Служебное сообщение для владельца: что сломалось. Пустая строка — если всё хорошо."""
+    lines = []
+    for name, result in sections:
+        if result["error"]:
+            lines.append(f"• {escape_html(name)}: {escape_html(result['error'])}")
+        elif not result["items"]:
+            lines.append(f"• {escape_html(name)}: свежих новостей не нашлось, раздел пропущен")
+    if problems:
+        lines.append(f"• Не ответили источники: {escape_html(', '.join(sorted(problems)))}")
+    if not lines:
+        return ""
+    return "<b>⚙️ Служебное: дайджест</b>\n" + "\n".join(lines)
+
+
 def split_message(text, limit=4000):
-    if len(text) <= limit:
-        return [text]
-    parts = []
-    current = []
-    current_len = 0
+    parts, current, size = [], [], 0
     for line in text.split("\n"):
-        if current_len + len(line) + 1 > limit:
+        if current and size + len(line) + 1 > limit:
             parts.append("\n".join(current))
-            current = []
-            current_len = 0
+            current, size = [], 0
         current.append(line)
-        current_len += len(line) + 1
+        size += len(line) + 1
     if current:
         parts.append("\n".join(current))
     return parts
 
 
-def send_telegram_message(text):
+def send_telegram_message(text, chat_id):
     url = TELEGRAM_URL.format(token=TELEGRAM_BOT_TOKEN)
     for chunk in split_message(text):
         payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": chunk,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
-        headers = {"Content-Type": "application/json"}
-        http_post_json(url, payload, headers)
+        http_post_json(url, payload, {"Content-Type": "application/json"})
 
+
+# ---------------------------------------------------------------- main
 
 def main():
-    missing = [
-        name
-        for name, val in [
-            ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
-            ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
-            ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
-        ]
-        if not val
-    ]
+    missing = [n for n, v in [
+        ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY),
+        ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+        ("TELEGRAM_CHAT_ID", TELEGRAM_CHAT_ID),
+    ] if not v]
     if missing:
         print(f"Не заданы переменные окружения: {', '.join(missing)}", file=sys.stderr)
         sys.exit(1)
 
-    topics = load_topics()
-    topic_results = []
+    topics = load_config()
+    problems = set()
+    sections = []
+    already_chosen = []
 
     for topic in topics:
+        name = topic["name"]
         try:
-            items = fetch_news_for_topic(topic)
-            topic_results.append((topic, {"items": items, "error": None}))
-        except (urllib.error.URLError, ValueError, json.JSONDecodeError) as e:
-            topic_results.append((topic, {"items": [], "error": str(e)}))
+            items = collect_topic_items(topic, problems)
+            if not items:
+                sections.append((name, {"items": [], "error": None}))
+                continue
+            picked = pick_top_news(topic, items, already_chosen)
+            already_chosen.extend(p["title"] for p in picked)
+            sections.append((name, {"items": picked, "error": None}))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "ignore")[:200]
+            print(f"[{name}] Claude API: {e.code} {detail}", file=sys.stderr)
+            sections.append((name, {"items": [], "error": f"ошибка Claude API {e.code}"}))
+        except Exception as e:
+            print(f"[{name}] {e}", file=sys.stderr)
+            sections.append((name, {"items": [], "error": str(e)[:150]}))
 
-    digest = build_digest(topic_results)
+    target = TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID
+    has_news = any(r["items"] for _, r in sections)
+    report = build_service_report(sections, problems)
 
-    try:
-        send_telegram_message(digest)
-    except urllib.error.HTTPError as e:
-        print(f"Ошибка отправки в Telegram: {e.read().decode('utf-8', 'ignore')}", file=sys.stderr)
-        sys.exit(1)
+    if has_news:
+        digest = build_digest(sections, CHANNEL_FOOTER if TELEGRAM_CHANNEL_ID else "")
+        try:
+            send_telegram_message(digest, target)
+            print(f"Дайджест отправлен в {target}.")
+        except urllib.error.HTTPError as e:
+            err = e.read().decode("utf-8", "ignore")
+            print(f"Ошибка отправки в Telegram ({target}): {err}", file=sys.stderr)
+            report = (report + "\n" if report else "<b>⚙️ Служебное: дайджест</b>\n") + \
+                f"• Не удалось отправить пост в {escape_html(target)}: {escape_html(err[:200])}"
+    else:
+        report = report or "<b>⚙️ Служебное: дайджест</b>"
+        report += "\n• Пост не отправлен: ни в одном разделе нет новостей"
 
-    print("Дайджест отправлен.")
+    if report:
+        send_telegram_message(report, TELEGRAM_CHAT_ID)
+        print("Служебное сообщение отправлено владельцу.")
 
 
 if __name__ == "__main__":
