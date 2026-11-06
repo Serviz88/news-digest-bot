@@ -1,0 +1,31 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import sys; sys.path.insert(0, ".")
+          import news_daily as nd
+          urls = [
+            "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+            "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+            "https://feeds.marketwatch.com/marketwatch/topstories/",
+            "https://www.investing.com/rss/news_14.rss",
+            "https://www.investing.com/rss/news_25.rss",
+            "https://finance.yahoo.com/news/rssindex",
+            "https://www.federalreserve.gov/feeds/press_monetary.xml",
+            "https://www.ecb.europa.eu/rss/press.html",
+            "https://www.kommersant.ru/RSS/section-economics.xml",
+            "https://ru.investing.com/rss/news_14.rss",
+          ]
+          for u in urls:
+              try:
+                  items = nd.parse_feed(nd.http_get(u), "x")
+                  dates = [i["date"] for i in items if i["date"]]
+                  print("OK ", len(items), max(dates) if dates else "-", u, "|", items[0]["title"][:70] if items else "")
+              except Exception as e:
+                  print("ERR", u, e)
+          PY
