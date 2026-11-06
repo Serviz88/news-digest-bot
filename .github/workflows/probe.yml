@@ -1,0 +1,11 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s "https://data-api.binance.vision/api/v3/exchangeInfo?symbols=%5B%22QQQBUSDT%22,%22CYBERUSDT%22%5D" | python3 -c "
+          import json,sys; d=json.load(sys.stdin)
+          for s in d['symbols']:
+            s.pop('filters',None); print(json.dumps(s)[:900])"
