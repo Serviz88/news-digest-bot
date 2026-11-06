@@ -88,6 +88,56 @@
       ]
     },
     {
+      "name": "🏦 Ставки ЦБ и финансы",
+      "focus": "Решения и сигналы центробанков (ФРС, ЕЦБ, Банк Японии, Банк Англии, Народный банк Китая, ЦБ РФ и центробанки СНГ): ставки, инфляция, прогнозы. Значимые финансовые события США, Азии и Европы: важная макростатистика (инфляция, рынок труда, ВВП), сильные движения рынков, крупные отчёты компаний и события, которые двигают рынки. Без крипты — она в отдельном разделе. Пропускай советы инвесторам, обзоры «какие акции купить» и мелкие корпоративные новости.",
+      "count": 5,
+      "feeds": [
+        {
+          "name": "ФРС",
+          "urls": [
+            "https://www.federalreserve.gov/feeds/press_monetary.xml"
+          ]
+        },
+        {
+          "name": "ЕЦБ",
+          "urls": [
+            "https://www.ecb.europa.eu/rss/press.html"
+          ]
+        },
+        {
+          "name": "CNBC",
+          "urls": [
+            "https://www.cnbc.com/id/20910258/device/rss/rss.html"
+          ]
+        },
+        {
+          "name": "CNBC",
+          "urls": [
+            "https://www.cnbc.com/id/10000664/device/rss/rss.html"
+          ]
+        },
+        {
+          "name": "MarketWatch",
+          "urls": [
+            "https://feeds.marketwatch.com/marketwatch/topstories/"
+          ]
+        },
+        {
+          "name": "Investing.com",
+          "urls": [
+            "https://ru.investing.com/rss/news_14.rss",
+            "https://www.investing.com/rss/news_14.rss"
+          ]
+        },
+        {
+          "name": "Investing.com",
+          "urls": [
+            "https://www.investing.com/rss/news_25.rss"
+          ]
+        }
+      ]
+    },
+    {
       "name": "₿ Крипто-новости",
       "focus": "Биткоин, эфир, крупные альткоины, биржи, ETF, регулирование крипты в России и мире, взломы и крупные события рынка.",
       "count": 5,
