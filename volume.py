@@ -38,6 +38,12 @@ TOP_N = 5
 STABLES = {"USDC", "FDUSD", "TUSD", "USDP", "DAI", "BUSD", "EUR", "USD1", "XUSD",
            "AEUR", "EURI", "USDE", "PYUSD", "BFUSD", "RLUSD", "UST", "USTC"}
 
+# Не монеты: токенизированные акции/ETF на Binance и «обёрнутые» копии других монет.
+# Если появятся новые — дописать сюда.
+NOT_COINS = {"WBTC", "WETH", "WBETH", "BETH", "PAXG", "XAUT",
+             "SPYB", "QQQB", "TQQQB", "EWYB", "BMNRB", "NVDAB", "TSLAB", "AAPLB",
+             "MSFTB", "AMZNB", "GOOGLB", "METAB", "COINB", "MSTRB", "HOODB", "CRCLB"}
+
 NY = ZoneInfo("America/New_York")
 MSK = ZoneInfo("Europe/Moscow")
 
@@ -56,7 +62,7 @@ def candidates():
         if not sym.endswith("USDT"):
             continue
         base = sym[:-4]
-        if base in STABLES or base.endswith(("UP", "DOWN", "BULL", "BEAR")):
+        if base in STABLES or base in NOT_COINS or base.endswith(("UP", "DOWN", "BULL", "BEAR")):
             continue
         if float(t["quoteVolume"]) < MIN_QUOTE_VOLUME or int(t.get("count", 0)) == 0:
             continue
