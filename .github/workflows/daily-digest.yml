@@ -4,7 +4,12 @@ on:
   schedule:
     # 06:00 UTC = 09:00 МСК (у Москвы фиксированное смещение UTC+3, без перехода на летнее время)
     - cron: "0 6 * * *"
-  workflow_dispatch: {}  # позволяет запустить вручную кнопкой "Run workflow" на GitHub
+  workflow_dispatch:  # позволяет запустить вручную кнопкой "Run workflow" на GitHub
+    inputs:
+      preview:
+        description: "Только картинку «Пульс дня» мне в личку (для проверки)"
+        type: boolean
+        default: false
 
 # Разрешение записывать в репозиторий (нужно для шага "Не дать GitHub выключить бота")
 permissions:
@@ -22,6 +27,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Pillow (для картинки «Пульс дня»)
+        run: pip install --quiet pillow
+
       - name: Run daily digest script
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -31,6 +39,7 @@ jobs:
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           # Подпись внизу поста в канале (необязательно)
           CHANNEL_FOOTER: ${{ secrets.CHANNEL_FOOTER }}
+          PREVIEW: ${{ inputs.preview }}
         run: python news_daily.py
 
       # GitHub выключает расписание, если в репозитории 60 дней нет изменений.

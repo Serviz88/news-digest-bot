@@ -293,9 +293,10 @@ def fmt_price(value):
 
 
 def build_market_lines(topic, problems):
-    lines = []
+    """Возвращает (строки для текстового варианта, данные для картинки)."""
+    lines, groups_data = [], []
     for group in topic.get("groups", []):
-        row_parts = []
+        row_parts, row_data = [], []
         for ins in group.get("items", []):
             try:
                 price, change = fetch_change(ins["symbol"])
@@ -306,12 +307,15 @@ def build_market_lines(topic, problems):
             mark = "🟢" if change > 0.005 else ("🔴" if change < -0.005 else "⚪")
             pct = f"{change:+.2f}%".replace(".", ",")
             row_parts.append(f"{mark} {escape_html(ins['name'])} {fmt_price(price)} ({pct})")
+            row_data.append((ins["name"], fmt_price(price), change))
+        if row_data:
+            groups_data.append((group.get("title", ""), row_data))
         if row_parts:
             if lines:
                 lines.append("")
             lines.append(f"<b>{escape_html(group.get('title', ''))}</b>")
             lines.extend(row_parts)
-    return lines
+    return lines, groups_data
 
 
 # ---------------------------------------------------------------- Telegram
@@ -406,6 +410,39 @@ def send_telegram_message(text, chat_id):
         http_post_json(url, payload, {"Content-Type": "application/json"})
 
 
+def send_telegram_photo(png_bytes, caption, chat_id):
+    """Отправка картинки (multipart/form-data, без сторонних библиотек)."""
+    boundary = "----newsdigest" + os.urandom(8).hex()
+    parts = []
+    for key, val in (("chat_id", chat_id), ("caption", caption), ("parse_mode", "HTML")):
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{val}\r\n'.encode("utf-8"))
+    parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; filename="pulse.png"\r\n'
+                  "Content-Type: image/png\r\n\r\n").encode("utf-8") + png_bytes + b"\r\n")
+    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+        data=b"".join(parts),
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def pulse_as_image(sections):
+    """PNG-картинка «Пульса дня» или None (нет данных / нет библиотеки)."""
+    for name, result in sections:
+        if result.get("data"):
+            try:
+                import pulse_image
+            except ImportError:
+                print("Pillow не установлен — пульс уйдёт текстом", file=sys.stderr)
+                return None
+            date_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+            return pulse_image.render(result["data"], date_str)
+    return None
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -426,8 +463,8 @@ def main():
     for topic in topics:
         name = topic["name"]
         if topic.get("type") == "market":
-            mlines = build_market_lines(topic, problems)
-            sections.append((name, {"items": [], "lines": mlines,
+            mlines, mdata = build_market_lines(topic, problems)
+            sections.append((name, {"items": [], "lines": mlines, "data": mdata,
                                     "error": None if mlines else "котировки недоступны"}))
             continue
         try:
@@ -446,12 +483,34 @@ def main():
             print(f"[{name}] {e}", file=sys.stderr)
             sections.append((name, {"items": [], "error": str(e)[:150]}))
 
-    target = TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID
+    preview = os.environ.get("PREVIEW") == "true"
+    target = TELEGRAM_CHAT_ID if preview else (TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID)
     report = build_service_report(sections, problems)
     footer = CHANNEL_FOOTER if TELEGRAM_CHANNEL_ID else ""
-    messages = [m for m in [build_pulse(sections)] + build_digest(sections, footer) if m]
-
     failures = []
+
+    # «Пульс дня» — картинкой; если не получилось — текстом
+    pulse_sent = False
+    png = None
+    try:
+        png = pulse_as_image(sections)
+    except Exception as e:
+        print(f"Не удалось нарисовать картинку: {e}", file=sys.stderr)
+    if png:
+        caption = f"<b>📊 Пульс дня — {datetime.now(MOSCOW_TZ).strftime('%d.%m.%Y')}</b>"
+        try:
+            send_telegram_photo(png, caption, target)
+            pulse_sent = True
+        except urllib.error.HTTPError as e:
+            err = e.read().decode("utf-8", "ignore")
+            print(f"Ошибка отправки картинки: {err}", file=sys.stderr)
+            failures.append(err[:200])
+
+    messages = ([] if pulse_sent else [build_pulse(sections)]) + build_digest(sections, footer)
+    messages = [m for m in messages if m]
+    if preview:
+        messages = []  # в режиме просмотра — только картинка
+
     for msg in messages:
         try:
             send_telegram_message(msg, target)
@@ -459,11 +518,11 @@ def main():
             err = e.read().decode("utf-8", "ignore")
             print(f"Ошибка отправки в Telegram ({target}): {err}", file=sys.stderr)
             failures.append(err[:200])
-    if messages and not failures:
-        print(f"Отправлено сообщений в {target}: {len(messages)}.")
+    if not failures:
+        print(f"Отправлено в {target}: картинка={'да' if pulse_sent else 'нет'}, сообщений={len(messages)}.")
 
     extra = []
-    if not messages:
+    if not messages and not pulse_sent:
         extra.append("• Пост не отправлен: нет ни котировок, ни новостей")
     for err in failures:
         extra.append(f"• Не удалось отправить пост в {escape_html(target)}: {escape_html(err)}")
