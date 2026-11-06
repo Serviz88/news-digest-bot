@@ -338,14 +338,19 @@ def build_digest(sections, footer=""):
     """Пост с новостями: только готовые разделы, без технических сообщений.
     Пустая строка, если новостей нет."""
     now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
-    lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
-    has_items = False
-    for name, result in sections:
-        if result.get("lines") or result["error"] or not result["items"]:
-            continue
-        has_items = True
-        lines.append(f"<b>{escape_html(name)}</b>")
-        lines.append("")
+    news = [(n, r) for n, r in sections
+            if not r.get("lines") and not r["error"] and r["items"]]
+    if not news:
+        return ""
+    if len(news) == 1:
+        # один раздел — его название и есть заголовок поста
+        lines = [f"<b>{escape_html(news[0][0])} — {now_str}</b>", ""]
+    else:
+        lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
+    for name, result in news:
+        if len(news) > 1:
+            lines.append(f"<b>{escape_html(name)}</b>")
+            lines.append("")
         for item in result["items"]:
             title = escape_html(item["title"])
             if item["url"]:
@@ -357,8 +362,6 @@ def build_digest(sections, footer=""):
             if meta:
                 lines.append(f"  <i>{meta}</i>")
             lines.append("")
-    if not has_items:
-        return ""
     if footer:
         lines.append(escape_html(footer))
     return "\n".join(lines).strip()
