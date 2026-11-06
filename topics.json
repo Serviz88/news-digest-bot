@@ -4,26 +4,87 @@
       "name": "📊 Пульс дня",
       "type": "market",
       "groups": [
-        {"title": "🇺🇸 США", "items": [
-          {"name": "S&P 500", "symbol": "^GSPC"},
-          {"name": "Nasdaq", "symbol": "^IXIC"},
-          {"name": "Dow Jones", "symbol": "^DJI"}
-        ]},
-        {"title": "🇪🇺 Европа", "items": [
-          {"name": "Euro Stoxx 50", "symbol": "^STOXX50E"},
-          {"name": "DAX", "symbol": "^GDAXI"}
-        ]},
-        {"title": "🌏 Азия", "items": [
-          {"name": "Nikkei 225", "symbol": "^N225"},
-          {"name": "Hang Seng", "symbol": "^HSI"},
-          {"name": "Shanghai", "symbol": "000001.SS"}
-        ]},
-        {"title": "🪙 Сырьё и крипта", "items": [
-          {"name": "Золото", "symbol": "GC=F"},
-          {"name": "Нефть Brent", "symbol": "BZ=F"},
-          {"name": "Биткоин", "symbol": "BTC-USD"},
-          {"name": "Эфир", "symbol": "ETH-USD"}
-        ]}
+        {
+          "title": "🇺🇸 США",
+          "items": [
+            {
+              "name": "S&P 500",
+              "symbol": "^GSPC"
+            },
+            {
+              "name": "Nasdaq",
+              "symbol": "^IXIC"
+            },
+            {
+              "name": "Dow Jones",
+              "symbol": "^DJI"
+            }
+          ]
+        },
+        {
+          "title": "🇪🇺 Европа",
+          "items": [
+            {
+              "name": "Euro Stoxx 50",
+              "symbol": "^STOXX50E"
+            },
+            {
+              "name": "DAX",
+              "symbol": "^GDAXI"
+            }
+          ]
+        },
+        {
+          "title": "🌏 Азия",
+          "items": [
+            {
+              "name": "Nikkei 225",
+              "symbol": "^N225"
+            },
+            {
+              "name": "Hang Seng",
+              "symbol": "^HSI"
+            },
+            {
+              "name": "Shanghai",
+              "symbol": "000001.SS"
+            }
+          ]
+        },
+        {
+          "title": "🛢 Сырьё",
+          "items": [
+            {
+              "name": "Золото",
+              "symbol": "GC=F"
+            },
+            {
+              "name": "Серебро",
+              "symbol": "SI=F"
+            },
+            {
+              "name": "Нефть Brent",
+              "symbol": "BZ=F"
+            }
+          ]
+        },
+        {
+          "title": "₿ Крипта",
+          "items": [
+            {
+              "name": "Биткоин",
+              "symbol": "BTC-USD"
+            },
+            {
+              "name": "Эфир",
+              "symbol": "ETH-USD"
+            },
+            {
+              "name": "Solana",
+              "symbol": "SOL-USD"
+            }
+          ]
+        }
       ]
     },
     {
@@ -31,10 +92,32 @@
       "focus": "Биткоин, эфир, крупные альткоины, биржи, ETF, регулирование крипты в России и мире, взломы и крупные события рынка.",
       "count": 5,
       "feeds": [
-        {"name": "ForkLog", "urls": ["https://forklog.com/feed", "https://forklog.com/feed/"]},
-        {"name": "Bits.media", "urls": ["https://bits.media/rss2/", "https://bits.media/rss/"]},
-        {"name": "CoinDesk", "urls": ["https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml"]},
-        {"name": "Cointelegraph", "urls": ["https://cointelegraph.com/rss"]}
+        {
+          "name": "ForkLog",
+          "urls": [
+            "https://forklog.com/feed",
+            "https://forklog.com/feed/"
+          ]
+        },
+        {
+          "name": "Bits.media",
+          "urls": [
+            "https://bits.media/rss2/",
+            "https://bits.media/rss/"
+          ]
+        },
+        {
+          "name": "CoinDesk",
+          "urls": [
+            "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml"
+          ]
+        },
+        {
+          "name": "Cointelegraph",
+          "urls": [
+            "https://cointelegraph.com/rss"
+          ]
+        }
       ]
     },
     {
@@ -42,9 +125,25 @@
       "focus": "Самые значимые события дня в мире и России: политика, международные отношения, крупные происшествия, важные решения центробанков и правительств. Без крипты — она в отдельном разделе.",
       "count": 4,
       "feeds": [
-        {"name": "ТАСС", "urls": ["https://tass.ru/rss/v2.xml", "http://itar-tass.com/rss/v2.xml"]},
-        {"name": "Интерфакс", "urls": ["https://www.interfax.ru/rss.asp"]},
-        {"name": "РБК", "urls": ["https://rssexport.rbc.ru/rbcnews/news/30/full.rss"]}
+        {
+          "name": "ТАСС",
+          "urls": [
+            "https://tass.ru/rss/v2.xml",
+            "http://itar-tass.com/rss/v2.xml"
+          ]
+        },
+        {
+          "name": "Интерфакс",
+          "urls": [
+            "https://www.interfax.ru/rss.asp"
+          ]
+        },
+        {
+          "name": "РБК",
+          "urls": [
+            "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"
+          ]
+        }
       ]
     }
   ]
