@@ -1,13 +1,29 @@
 {
   "topics": [
     {
-      "name": "💰 Экономика и финансы",
-      "focus": "Экономика России и мира: ЦБ и ставки, курс рубля, нефть, биржи, крупные компании, налоги и законы для бизнеса.",
-      "count": 4,
-      "feeds": [
-        {"name": "РБК", "urls": ["https://rssexport.rbc.ru/rbcnews/news/30/full.rss"]},
-        {"name": "Коммерсантъ", "urls": ["https://www.kommersant.ru/RSS/section-economics.xml", "https://www.kommersant.ru/RSS/main.xml"]},
-        {"name": "Интерфакс", "urls": ["https://www.interfax.ru/rss.asp"]}
+      "name": "📊 Пульс дня",
+      "type": "market",
+      "groups": [
+        {"title": "🇺🇸 США", "items": [
+          {"name": "S&P 500", "symbol": "^GSPC"},
+          {"name": "Nasdaq", "symbol": "^IXIC"},
+          {"name": "Dow Jones", "symbol": "^DJI"}
+        ]},
+        {"title": "🇪🇺 Европа", "items": [
+          {"name": "Euro Stoxx 50", "symbol": "^STOXX50E"},
+          {"name": "DAX", "symbol": "^GDAXI"}
+        ]},
+        {"title": "🌏 Азия", "items": [
+          {"name": "Nikkei 225", "symbol": "^N225"},
+          {"name": "Hang Seng", "symbol": "^HSI"},
+          {"name": "Shanghai", "symbol": "000001.SS"}
+        ]},
+        {"title": "🪙 Сырьё и крипта", "items": [
+          {"name": "Золото", "symbol": "GC=F"},
+          {"name": "Нефть Brent", "symbol": "BZ=F"},
+          {"name": "Биткоин", "symbol": "BTC-USD"},
+          {"name": "Эфир", "symbol": "ETH-USD"}
+        ]}
       ]
     },
     {
@@ -23,7 +39,7 @@
     },
     {
       "name": "🌍 Главные события",
-      "focus": "Самые значимые события дня в России и мире: политика, международные отношения, крупные происшествия. Без экономики и крипты — они в других разделах.",
+      "focus": "Самые значимые события дня в мире и России: политика, международные отношения, крупные происшествия, важные решения центробанков и правительств. Без крипты — она в отдельном разделе.",
       "count": 4,
       "feeds": [
         {"name": "ТАСС", "urls": ["https://tass.ru/rss/v2.xml", "http://itar-tass.com/rss/v2.xml"]},

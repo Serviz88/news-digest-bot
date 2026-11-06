@@ -26,6 +26,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -258,6 +259,58 @@ def pick_top_news(topic, items, already_chosen):
     return result
 
 
+# ---------------------------------------------------------------- Пульс дня (котировки)
+
+YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=10d&interval=1d"
+
+
+def fetch_change(symbol):
+    """Последняя цена и изменение в % к закрытию предыдущего дня (данные Yahoo Finance)."""
+    url = YAHOO_CHART.format(sym=urllib.parse.quote(symbol))
+    data = json.loads(http_get(url).decode("utf-8"))
+    res = data["chart"]["result"][0]
+    closes = [c for c in res["indicators"]["quote"][0]["close"] if c is not None]
+    price = res.get("meta", {}).get("regularMarketPrice") or closes[-1]
+    if len(closes) < 2:
+        raise ValueError("мало данных")
+    # Обычно последняя дневная свеча уже содержит текущую цену — тогда
+    # сравниваем с закрытием свечи перед ней. Если текущей свечи ещё нет —
+    # сравниваем с последним закрытием.
+    if abs(closes[-1] - price) <= abs(price) * 1e-4:
+        prev = closes[-2]
+    else:
+        prev = closes[-1]
+    return price, (price - prev) / prev * 100
+
+
+def fmt_price(value):
+    if value >= 1000:
+        text = f"{value:,.0f}".replace(",", " ")
+    else:
+        text = f"{value:,.2f}".replace(",", " ").replace(".", ",")
+    return text
+
+
+def build_market_lines(topic, problems):
+    lines = []
+    for group in topic.get("groups", []):
+        row_parts = []
+        for ins in group.get("items", []):
+            try:
+                price, change = fetch_change(ins["symbol"])
+            except Exception as e:
+                print(f"[котировки] {ins['symbol']}: {e}", file=sys.stderr)
+                problems.add(f"котировка {ins['name']}")
+                continue
+            mark = "🟢" if change > 0.005 else ("🔴" if change < -0.005 else "⚪")
+            pct = f"{change:+.2f}%".replace(".", ",")
+            row_parts.append(f"{mark} {escape_html(ins['name'])} {fmt_price(price)} ({pct})")
+        if row_parts:
+            lines.append(f"{group.get('title', '')}")
+            lines.extend(f"  {r}" for r in row_parts)
+    return lines
+
+
 # ---------------------------------------------------------------- Telegram
 
 def escape_html(text):
@@ -275,6 +328,11 @@ def build_digest(sections, footer=""):
     now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
     lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
     for name, result in sections:
+        if result.get("lines"):
+            lines.append(f"<b>{escape_html(name)}</b>")
+            lines.extend(result["lines"])
+            lines.append("")
+            continue
         if result["error"] or not result["items"]:
             continue
         lines.append(f"<b>{escape_html(name)}</b>")
@@ -298,6 +356,8 @@ def build_service_report(sections, problems):
     """Служебное сообщение для владельца: что сломалось. Пустая строка — если всё хорошо."""
     lines = []
     for name, result in sections:
+        if result.get("lines"):
+            continue
         if result["error"]:
             lines.append(f"• {escape_html(name)}: {escape_html(result['error'])}")
         elif not result["items"]:
@@ -353,6 +413,11 @@ def main():
 
     for topic in topics:
         name = topic["name"]
+        if topic.get("type") == "market":
+            mlines = build_market_lines(topic, problems)
+            sections.append((name, {"items": [], "lines": mlines,
+                                    "error": None if mlines else "котировки недоступны"}))
+            continue
         try:
             items = collect_topic_items(topic, problems)
             if not items:
@@ -370,7 +435,7 @@ def main():
             sections.append((name, {"items": [], "error": str(e)[:150]}))
 
     target = TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID
-    has_news = any(r["items"] for _, r in sections)
+    has_news = any(r["items"] or r.get("lines") for _, r in sections)
     report = build_service_report(sections, problems)
 
     if has_news:
