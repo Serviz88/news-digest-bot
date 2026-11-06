@@ -88,7 +88,40 @@
       ]
     },
     {
-      "name": "🏦 Ставки ЦБ и финансы",
+      "name": "₿ Крипто-новости",
+      "focus": "Биткоин, эфир, крупные альткоины, биржи, ETF, регулирование крипты в России и мире, взломы и крупные события рынка.",
+      "count": 5,
+      "feeds": [
+        {
+          "name": "ForkLog",
+          "urls": [
+            "https://forklog.com/feed",
+            "https://forklog.com/feed/"
+          ]
+        },
+        {
+          "name": "Bits.media",
+          "urls": [
+            "https://bits.media/rss2/",
+            "https://bits.media/rss/"
+          ]
+        },
+        {
+          "name": "CoinDesk",
+          "urls": [
+            "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml"
+          ]
+        },
+        {
+          "name": "Cointelegraph",
+          "urls": [
+            "https://cointelegraph.com/rss"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "🌐 Глобальные новости",
       "focus": "Решения и сигналы центробанков (ФРС, ЕЦБ, Банк Японии, Банк Англии, Народный банк Китая, ЦБ РФ и центробанки СНГ): ставки, инфляция, прогнозы. Значимые финансовые события США, Азии и Европы: важная макростатистика (инфляция, рынок труда, ВВП), сильные движения рынков, крупные отчёты компаний и события, которые двигают рынки. Без крипты — она в отдельном разделе. Пропускай советы инвесторам, обзоры «какие акции купить» и мелкие корпоративные новости.",
       "count": 5,
       "feeds": [
@@ -133,39 +166,6 @@
           "name": "Investing.com",
           "urls": [
             "https://www.investing.com/rss/news_25.rss"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "₿ Крипто-новости",
-      "focus": "Биткоин, эфир, крупные альткоины, биржи, ETF, регулирование крипты в России и мире, взломы и крупные события рынка.",
-      "count": 5,
-      "feeds": [
-        {
-          "name": "ForkLog",
-          "urls": [
-            "https://forklog.com/feed",
-            "https://forklog.com/feed/"
-          ]
-        },
-        {
-          "name": "Bits.media",
-          "urls": [
-            "https://bits.media/rss2/",
-            "https://bits.media/rss/"
-          ]
-        },
-        {
-          "name": "CoinDesk",
-          "urls": [
-            "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml"
-          ]
-        },
-        {
-          "name": "Cointelegraph",
-          "urls": [
-            "https://cointelegraph.com/rss"
           ]
         }
       ]

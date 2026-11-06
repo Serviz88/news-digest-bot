@@ -47,6 +47,7 @@ FRESH_HOURS = 26            # берём новости не старше это
 MAX_ITEMS_TO_MODEL = 120    # сколько заголовков максимум отдаём модели по одной теме
 DESC_CHARS = 200            # сколько символов описания статьи отдаём модели
 USER_AGENT = "Mozilla/5.0 (compatible; news-digest-bot/2.0)"
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 
 # ---------------------------------------------------------------- настройки
@@ -330,7 +331,9 @@ def build_pulse(sections):
     for name, result in sections:
         if result.get("lines"):
             now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
-            return "\n".join([f"<b>{escape_html(name)} — {now_str}</b>", ""] + result["lines"])
+            # Длинная линия-разделитель растягивает сообщение на всю ширину экрана
+            return "\n".join([f"<b>{escape_html(name)} — {now_str}</b>", DIVIDER, ""]
+                             + result["lines"] + ["", DIVIDER])
     return ""
 
 
