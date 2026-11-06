@@ -1,0 +1,46 @@
+name: Листинги Binance
+
+on:
+  schedule:
+    # каждые 10 минут (GitHub иногда запускает с опозданием на несколько минут)
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: listings
+  cancel-in-progress: false
+
+jobs:
+  check-listings:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Проверить новые листинги
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python listings.py
+
+      # Запоминаем, что уже опубликовано (иначе посты будут повторяться)
+      - name: Сохранить список опубликованного
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain listings_seen.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+            git add listings_seen.json
+            git commit -m "listings: update seen"
+            git pull --rebase origin main || true
+            git push || echo "не удалось сохранить"
+          fi
