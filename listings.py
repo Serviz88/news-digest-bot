@@ -174,7 +174,31 @@ def process(seen, key, items, item_id, item_time_ms, kind_of, build, label):
     return posted
 
 
+def send_samples():
+    """Образцы постов (по последним реальным объявлениям) — только в личный чат."""
+    global TARGET
+    TARGET = os.environ.get("TELEGRAM_CHAT_ID", "")
+    send("🧪 <b>Образцы постов о листингах</b> (видишь только ты)")
+    articles = http_json(BINANCE_LIST)["data"]["catalogs"][0]["articles"]
+    done = set()
+    for a in articles:
+        k = classify(a["title"])
+        if k and k not in done:
+            send(build_post(a, k))
+            done.add(k)
+    details = http_json(OKX_LIST, lang="ru-RU")["data"][0]["details"]
+    done = set()
+    for x in details:
+        k = okx_kind(x["title"])
+        if k and k not in done:
+            send(build_okx_post(x, k))
+            done.add(k)
+
+
 def main():
+    if os.environ.get("SAMPLE") == "true":
+        send_samples()
+        return
     if not TELEGRAM_BOT_TOKEN or not TARGET:
         print("Не заданы TELEGRAM_BOT_TOKEN и канал/чат", file=sys.stderr)
         sys.exit(1)

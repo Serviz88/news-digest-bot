@@ -4,7 +4,12 @@ on:
   schedule:
     # каждые 10 минут (GitHub иногда запускает с опозданием на несколько минут)
     - cron: "*/10 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: "Прислать образцы постов только мне в личку"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -30,6 +35,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          SAMPLE: ${{ inputs.sample }}
         run: python listings.py
 
       # Запоминаем, что уже опубликовано (иначе посты будут повторяться)
