@@ -456,6 +456,12 @@ def main():
         sys.exit(1)
 
     topics = load_config()
+    # PART: какую часть отправлять в этот запуск (pulse / crypto / global / all).
+    # Части разнесены по времени, чтобы не слать подписчикам три уведомления подряд.
+    part = os.environ.get("PART", "all") or "all"
+    if part != "all":
+        topics = [t for t in topics if t.get("part") == part]
+    print(f"Часть: {part}, разделов: {len(topics)}")
     problems = set()
     sections = []
     already_chosen = []

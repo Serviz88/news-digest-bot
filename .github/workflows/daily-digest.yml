@@ -2,10 +2,18 @@ name: Ежедневный новостной дайджест
 
 on:
   schedule:
-    # 06:00 UTC = 09:00 МСК (у Москвы фиксированное смещение UTC+3, без перехода на летнее время)
-    - cron: "0 6 * * *"
+    # Три части в разное время (UTC; Москва = UTC+3, без перехода на летнее время).
+    # Минуты не ровные (:17) — в начале часа GitHub сильно задерживает запуски.
+    - cron: "17 6 * * *"    # 09:17 МСК — 📊 Пульс дня (картинка)
+    - cron: "17 10 * * *"   # 13:17 МСК — ₿ Крипто-новости
+    - cron: "17 15 * * *"   # 18:17 МСК — 🌐 Глобальные новости
   workflow_dispatch:  # позволяет запустить вручную кнопкой "Run workflow" на GitHub
     inputs:
+      part:
+        description: "Что отправить"
+        type: choice
+        options: [all, pulse, crypto, global]
+        default: all
       preview:
         description: "Только картинку «Пульс дня» мне в личку (для проверки)"
         type: boolean
@@ -40,6 +48,11 @@ jobs:
           # Подпись внизу поста в канале (необязательно)
           CHANNEL_FOOTER: ${{ secrets.CHANNEL_FOOTER }}
           PREVIEW: ${{ inputs.preview }}
+          PART: >-
+            ${{ github.event.schedule == '17 6 * * *' && 'pulse'
+             || github.event.schedule == '17 10 * * *' && 'crypto'
+             || github.event.schedule == '17 15 * * *' && 'global'
+             || inputs.part || 'all' }}
         run: python news_daily.py
 
       # GitHub выключает расписание, если в репозитории 60 дней нет изменений.
@@ -49,7 +62,7 @@ jobs:
         if: always()
         run: |
           if [ "$(date -u +%u)" = "1" ] || [ ! -f last_run.txt ]; then
-            date -u +"%Y-%m-%d %H:%M UTC" > last_run.txt
+            date -u +"%Y-%m-%d" > last_run.txt
             git config user.name "github-actions[bot]"
             git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
             git add last_run.txt
