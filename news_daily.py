@@ -306,8 +306,10 @@ def build_market_lines(topic, problems):
             pct = f"{change:+.2f}%".replace(".", ",")
             row_parts.append(f"{mark} {escape_html(ins['name'])} {fmt_price(price)} ({pct})")
         if row_parts:
-            lines.append(f"{group.get('title', '')}")
-            lines.extend(f"  {r}" for r in row_parts)
+            if lines:
+                lines.append("")
+            lines.append(f"<b>{escape_html(group.get('title', ''))}</b>")
+            lines.extend(row_parts)
     return lines
 
 
@@ -323,19 +325,27 @@ def time_label(dt):
     return dt.astimezone(MOSCOW_TZ).strftime("%d.%m %H:%M")
 
 
-def build_digest(sections, footer=""):
-    """Пост для канала/чата: только готовые разделы, без технических сообщений."""
-    now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
-    lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
+def build_pulse(sections):
+    """Отдельное сообщение «Пульс дня». Пустая строка, если котировок нет."""
     for name, result in sections:
         if result.get("lines"):
-            lines.append(f"<b>{escape_html(name)}</b>")
-            lines.extend(result["lines"])
-            lines.append("")
+            now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+            return "\n".join([f"<b>{escape_html(name)} — {now_str}</b>", ""] + result["lines"])
+    return ""
+
+
+def build_digest(sections, footer=""):
+    """Пост с новостями: только готовые разделы, без технических сообщений.
+    Пустая строка, если новостей нет."""
+    now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+    lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
+    has_items = False
+    for name, result in sections:
+        if result.get("lines") or result["error"] or not result["items"]:
             continue
-        if result["error"] or not result["items"]:
-            continue
+        has_items = True
         lines.append(f"<b>{escape_html(name)}</b>")
+        lines.append("")
         for item in result["items"]:
             title = escape_html(item["title"])
             if item["url"]:
@@ -346,7 +356,9 @@ def build_digest(sections, footer=""):
             meta = " · ".join(x for x in [escape_html(item["source"]), time_label(item["date"])] if x)
             if meta:
                 lines.append(f"  <i>{meta}</i>")
-        lines.append("")
+            lines.append("")
+    if not has_items:
+        return ""
     if footer:
         lines.append(escape_html(footer))
     return "\n".join(lines).strip()
@@ -435,22 +447,28 @@ def main():
             sections.append((name, {"items": [], "error": str(e)[:150]}))
 
     target = TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID
-    has_news = any(r["items"] or r.get("lines") for _, r in sections)
     report = build_service_report(sections, problems)
+    footer = CHANNEL_FOOTER if TELEGRAM_CHANNEL_ID else ""
+    messages = [m for m in (build_pulse(sections), build_digest(sections, footer)) if m]
 
-    if has_news:
-        digest = build_digest(sections, CHANNEL_FOOTER if TELEGRAM_CHANNEL_ID else "")
+    failures = []
+    for msg in messages:
         try:
-            send_telegram_message(digest, target)
-            print(f"Дайджест отправлен в {target}.")
+            send_telegram_message(msg, target)
         except urllib.error.HTTPError as e:
             err = e.read().decode("utf-8", "ignore")
             print(f"Ошибка отправки в Telegram ({target}): {err}", file=sys.stderr)
-            report = (report + "\n" if report else "<b>⚙️ Служебное: дайджест</b>\n") + \
-                f"• Не удалось отправить пост в {escape_html(target)}: {escape_html(err[:200])}"
-    else:
-        report = report or "<b>⚙️ Служебное: дайджест</b>"
-        report += "\n• Пост не отправлен: ни в одном разделе нет новостей"
+            failures.append(err[:200])
+    if messages and not failures:
+        print(f"Отправлено сообщений в {target}: {len(messages)}.")
+
+    extra = []
+    if not messages:
+        extra.append("• Пост не отправлен: нет ни котировок, ни новостей")
+    for err in failures:
+        extra.append(f"• Не удалось отправить пост в {escape_html(target)}: {escape_html(err)}")
+    if extra:
+        report = (report or "<b>⚙️ Служебное: дайджест</b>") + "\n" + "\n".join(extra)
 
     if report:
         send_telegram_message(report, TELEGRAM_CHAT_ID)
