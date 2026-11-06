@@ -338,22 +338,14 @@ def build_pulse(sections):
 
 
 def build_digest(sections, footer=""):
-    """Пост с новостями: только готовые разделы, без технических сообщений.
-    Пустая строка, если новостей нет."""
+    """Посты с новостями: отдельное сообщение на каждый раздел.
+    Подпись (footer) — только под последним. Пустой список, если новостей нет."""
     now_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
     news = [(n, r) for n, r in sections
             if not r.get("lines") and not r["error"] and r["items"]]
-    if not news:
-        return ""
-    if len(news) == 1:
-        # один раздел — его название и есть заголовок поста
-        lines = [f"<b>{escape_html(news[0][0])} — {now_str}</b>", ""]
-    else:
-        lines = [f"<b>📰 Главное за сутки — {now_str}</b>", ""]
-    for name, result in news:
-        if len(news) > 1:
-            lines.append(f"<b>{escape_html(name)}</b>")
-            lines.append("")
+    messages = []
+    for i, (name, result) in enumerate(news):
+        lines = [f"<b>{escape_html(name)} — {now_str}</b>", DIVIDER, ""]
         for item in result["items"]:
             title = escape_html(item["title"])
             if item["url"]:
@@ -365,9 +357,11 @@ def build_digest(sections, footer=""):
             if meta:
                 lines.append(f"  <i>{meta}</i>")
             lines.append("")
-    if footer:
-        lines.append(escape_html(footer))
-    return "\n".join(lines).strip()
+        lines.append(DIVIDER)
+        if footer and i == len(news) - 1:
+            lines.append(escape_html(footer))
+        messages.append("\n".join(lines).strip())
+    return messages
 
 
 def build_service_report(sections, problems):
@@ -455,7 +449,7 @@ def main():
     target = TELEGRAM_CHANNEL_ID or TELEGRAM_CHAT_ID
     report = build_service_report(sections, problems)
     footer = CHANNEL_FOOTER if TELEGRAM_CHANNEL_ID else ""
-    messages = [m for m in (build_pulse(sections), build_digest(sections, footer)) if m]
+    messages = [m for m in [build_pulse(sections)] + build_digest(sections, footer) if m]
 
     failures = []
     for msg in messages:
