@@ -1,0 +1,19 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+          P="/api/v5/support/announcements?annType=announcements-new-listings"
+          for h in www.okx.com my.okx.com app.okx.com okx.com; do
+            for lang in en-US ru-RU; do
+              echo "=== $h $lang"
+              curl -s -m 20 -A "$UA" -H "Accept-Language: $lang" "https://$h$P" | python3 -c "import json,sys,datetime as d
+          try:
+            j=json.load(sys.stdin); a=j['data'][0]['details'][:4]
+            [print(d.datetime.utcfromtimestamp(int(x['pTime'])/1000).date(), x['title'], x['url']) for x in a]
+          except Exception as e: print('ERR', e)"
+            done
+          done
