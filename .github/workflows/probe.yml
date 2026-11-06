@@ -1,9 +1,0 @@
-name: probe
-on: workflow_dispatch
-jobs:
-  probe:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          for u in "https://api.binance.com/api/v3/ping" "https://data-api.binance.vision/api/v3/ticker/24hr?symbol=BTCUSDT" "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=2"; do
-            echo "=== $u"; curl -s -m 20 -w "\nHTTP %{http_code}\n" "$u" | head -c 400; echo; done

@@ -1,0 +1,53 @@
+name: Аномальный объём
+
+on:
+  schedule:
+    # Примерно за час до открытия рынка США (09:30 Нью-Йорк).
+    # Два времени — для летнего и зимнего времени США; лишний запуск скрипт пропускает.
+    - cron: "43 12 * * *"   # лето США: 15:43 МСК
+    - cron: "43 13 * * *"   # зима США: 16:43 МСК
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "Только показать пост в журнале, ничего не отправлять"
+        type: boolean
+        default: true
+      force:
+        description: "Опубликовать сейчас, не дожидаясь времени"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  volume:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Найти аномальный объём
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID || '@bullrunyerevan' }}
+          CHANNEL_FOOTER: "${{ secrets.CHANNEL_FOOTER || '🐂 Bull Run Yerevan · Курсы трейдинга: bullrunyerevan.com' }}"
+          PREVIEW: ${{ inputs.preview }}
+          FORCE: ${{ inputs.force }}
+        run: python volume.py
+
+      # Запоминаем дату публикации, чтобы не было двух постов в день
+      - name: Сохранить дату публикации
+        run: |
+          if [ -n "$(git status --porcelain volume_last.txt)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+            git add volume_last.txt
+            git commit -m "volume: posted $(cat volume_last.txt)"
+            git pull --rebase origin main || true
+            git push || echo "не удалось сохранить"
+          fi
