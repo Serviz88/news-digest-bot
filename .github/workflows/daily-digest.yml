@@ -46,7 +46,7 @@ jobs:
           # Канал для дайджеста, например @my_channel (если не задан — дайджест идёт в личный чат)
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID || '@bullrunyerevan' }}
           # Подпись внизу поста в канале (необязательно)
-          CHANNEL_FOOTER: ${{ secrets.CHANNEL_FOOTER || '🐂 Bull Run Yerevan · Курсы трейдинга: bullrunyerevan.com' }}
+          CHANNEL_FOOTER: "${{ secrets.CHANNEL_FOOTER || '🐂 Bull Run Yerevan · Курсы трейдинга: bullrunyerevan.com' }}"
           PREVIEW: ${{ inputs.preview }}
           PART: >-
             ${{ github.event.schedule == '17 6 * * *' && 'pulse'
